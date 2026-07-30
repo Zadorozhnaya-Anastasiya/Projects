@@ -1,0 +1,1940 @@
+openapi: 3.0.0
+info:
+  title: Кофе & Точка
+  version: 1.0.0
+security:
+  - bearerAuth: [] 
+tags:
+  - name: Клиентское Приложение
+  - name: Приложение Бариста
+  - name: Административная Панель
+paths:
+  /auth/request-code/:
+    post:
+      security: []
+      tags:
+        - Клиентское Приложение
+      summary: Запросить код подтверждения
+      description: |
+        Отправляет SMS с кодом подтверждения на указанный номер телефона.
+        Код действителен в течение 5 минут.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+7[0-9]{10}$'
+                  example: '+79161234567'
+                  description: Номер телефона в формате +7XXXXXXXXXX
+      responses:
+        '200':
+          description: Код успешно отправлен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 'Код отправлен'
+                  expires_in:
+                    type: integer
+                    description: Время жизни кода в секундах
+                    example: 300
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '429':
+          description: Слишком много попыток
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Превышено количество попыток. Попробуйте через 5 минут.'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/verify-code/:
+    post:
+      security: []
+      tags:
+        - Клиентское Приложение
+      summary: Подтвердить код и получить токен
+      description: |
+        Проверяет код подтверждения и возвращает JWT-токен для доступа к API.
+        Если пользователь с таким номером не найден — автоматически создаётся новый.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - code
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+7[0-9]{10}$'
+                  example: '+79161234567'
+                  description: Номер телефона
+                code:
+                  type: string
+                  minLength: 4
+                  maxLength: 6
+                  example: '123456'
+                  description: Код подтверждения из SMS
+      responses:
+        '200':
+          description: Успешная авторизация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          description: Неверный код
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Неверный код подтверждения'
+        '429':
+          description: Слишком много попыток
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Превышено количество попыток. Попробуйте через 5 минут.'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /client/points/balance/:
+    get:
+      tags: 
+        - Клиентское Приложение
+      summary: Баланс клиента
+      description: Возвращает баланс баллов клиента
+      responses: 
+        '200':
+          description: Успешный ответ
+          content: 
+            application/json:
+              schema:
+                type: integer
+                example: 12
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /client/points/history/:
+    get:
+      tags:
+        - Клиентское Приложение
+      summary: Получить историю транзакций с баллами
+      description: Возвращает список операций с баллами авторизованного клиента с пагинацией
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PointTransaction'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+          
+  /client/orders/:
+    get:
+      tags:
+        - Клиентское Приложение
+      summary: Показать историю заказов авторизованного пользователя
+      description: Возвращает историю заказов авторизованного пользователя с пагинацией. Заказы отсортированы по дате
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Успешный ответ, история заказов клиента найдена
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /client/orders/{id}/:
+    get:
+      tags:
+        - Клиентское Приложение
+      summary: Выводит заказ клиента по идентификатору
+      description: Заказ клиента со всеми товарами и модификаторами
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 123
+      responses:
+        '200':
+          description: Успешный ответ, заказ найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /client/profile/:
+    get:
+      tags:
+        - Клиентское Приложение
+      summary: Профиль пользователя
+      description: Возвращает профиль авторизованного пользователя
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        
+  /barista/clients/search/by-code/:
+    get:
+      security: []
+      tags: 
+        - Приложение Бариста
+      summary: Найти клиента по QR-коду
+      description: Метод для поиска клиента по коду, зашитому в QR
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{3}$-^[0-9]{3}'
+      responses:
+        '200': 
+          description: Успешный ответ. Клиент найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /barista/clients/search/by-phone/:
+    get:
+      security: []
+      tags: 
+        - Приложение Бариста
+      summary: Найти клиента по номеру телефона
+      description: Метод для поиска клиента по номеру телефона
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^\7[0-9]{10}$'
+            example: '79999999999'
+      responses:
+        '200': 
+          description: Успешный ответ. Клиент найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /barista/categories/:
+    get:
+      security: []
+      tags:
+        - Приложение Бариста
+      summary: Список категорий товаров
+      description: Список категорий товаров
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+  /barista/products/:
+    get:
+      security: []
+      tags:
+        - Приложение Бариста
+      summary: Список товаров
+      description: Список товаров с пагинацией
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: category
+          in: query
+          schema:
+            type: integer
+            pattern: '^\7[0-9]{10}$'
+            example: 101
+        - name: search
+          in: query
+          schema:
+            type: string
+            example: 'абв'
+        - name: sort_by
+          in: query
+          required: false
+          description: |
+            Поле для сортировки:
+            - `name` — по алфавиту
+            - `price` — по цене (возрастание)
+            - `-price` — по цене (убывание)
+            - `popular` — по популярности (убывание)
+          schema:
+            type: string
+            enum: [name, price, -price, popular]
+            default: 'name'
+            example: 'popular'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /barista/products/{id}/:
+    get:
+      security: []
+      tags:
+        - Приложение Бариста
+      summary: Товар
+      description: Товар по идентификатору
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: integer
+            pattern: '^\7[0-9]{10}$'
+            example: 101
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetale'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /barista/orders/:
+    post:
+      tags:
+        - Приложение Бариста
+      summary: Сохранить заказ и начислить баллы
+      description: |
+        Бариста отправляет готовый заказ на сервер после оплаты.
+        Система:
+        - создаёт заказ в БД,
+        - фиксирует цены товаров и модификаторов на момент продажи,
+        - начисляет баллы клиенту,
+        - обновляет баланс клиента.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderSaveRequest'
+      responses:
+        '201':
+          description: Заказ успешно создан, баллы начислены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderSaveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Клиент не найден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Клиент с ID 123 не найден'
+        '409':
+          description: Конфликт (например, клиент заблокирован)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Клиент заблокирован'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+                
+  /admin/auth/login/:
+    post:
+      security: []
+      tags:
+        - Административная Панель
+      summary: Вход в административную панель
+      description: |
+        Администратор входит в систему по email и паролю.
+        Возвращает JWT-токен для доступа к API администрирования.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: 'admin@coffee.ru'
+                  description: Email администратора
+                password:
+                  type: string
+                  format: password
+                  example: 'secure_password_123'
+                  description: Пароль администратора
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          description: Неверные учетные данные
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Неверный email или пароль'
+        '403':
+          description: Доступ запрещён (аккаунт заблокирован или недостаточно прав)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Учетная запись заблокирована'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/coffee-shops/:
+    post:
+      tags:
+        - Административная Панель
+      summary: Создать новую кофейню
+      description: |
+        Администратор создаёт новую кофейню в системе.
+        Кофейня автоматически участвует в программе лояльности.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoffeeShopCreate'
+      responses:
+        '201':
+          description: Кофейня успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoffeeShop'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Кофейня с таким названием или адресом уже существует
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Кофейня с адресом "ул. Тверская, д. 10" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить список кофеен
+      description: Возвращает список всех кофеен в системе с пагинацией. Администратор может фильтровать по статусу блокировки.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: is_blocked
+          in: query
+          required: false
+          description: Фильтр по статусу блокировки
+          schema:
+            type: boolean
+            example: false
+        - name: search
+          in: query
+          required: false
+          description: Поиск по названию или адресу
+          schema:
+            type: string
+            maxLength: 255
+            example: 'Тверская'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CoffeeShop'
+                  total:
+                    type: integer
+                    description: Общее количество записей
+                    example: 15
+                  limit:
+                    type: integer
+                    example: 20
+                  offset:
+                    type: integer
+                    example: 0
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/coffee-shops/{id}/:
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить детали кофейни
+      description: Возвращает полную информацию о кофейне по её ID. Доступно только администраторам.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID кофейни
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoffeeShop'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - Административная Панель
+      summary: Частично обновить кофейню
+      description: Администратор может обновить одно или несколько полей кофейни. Поля, не переданные в запросе, остаются без изменений.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID кофейни
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoffeeShopUpdate'
+      responses:
+        '200':
+          description: Кофейня успешно обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoffeeShop'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Кофейня не найдена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Кофейня с ID 1 не найдена'
+        '409':
+          description: Конфликт (дубликат названия или адреса)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Кофейня с адресом "ул. Тверская, д. 10" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/categories/:
+    post:
+      tags:
+        - Административная Панель
+      summary: Создать новую категорию
+      description: |
+        Администратор создаёт новую категорию для группировки товаров.
+        Категория содержит только ID и название.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreate'
+      responses:
+        '201':
+          description: Категория успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Категория с таким названием уже существует
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Категория с названием "Кофе" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить список категорий
+      description: |
+        Возвращает список всех категорий в системе.
+        Доступно только администраторам.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: search
+          in: query
+          required: false
+          description: Поиск по названию категории
+          schema:
+            type: string
+            maxLength: 255
+            example: 'Кофе'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+                  total:
+                    type: integer
+                    description: Общее количество записей
+                    example: 10
+                  limit:
+                    type: integer
+                    example: 20
+                  offset:
+                    type: integer
+                    example: 0
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/categories/{id}/:
+    patch:
+      tags:
+        - Административная Панель
+      summary: Редактировать категорию
+      description: |
+        Администратор может обновить название категории.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID категории
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdate'
+      responses:
+        '200':
+          description: Категория успешно обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Категория не найдена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Категория с ID 1 не найдена'
+        '409':
+          description: Конфликт (дубликат названия)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Категория с названием "Кофе" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'          
+  /admin/products/:
+    post:
+      tags:
+        - Административная Панель
+      summary: Создать новый товар
+      description: |
+        Администратор создаёт новый товар (напиток, еда, выпечка).
+        Товар автоматически становится доступен в каталоге бариста.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Товар успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Товар с таким названием уже существует
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Товар с названием "Латте" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить список товаров
+      description: |
+        Возвращает список всех товаров в системе с пагинацией.
+        Администратор может фильтровать по категории, статусу блокировки и искать по названию.
+        Доступно только администраторам.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: category_id
+          in: query
+          required: false
+          description: Фильтр по категории
+          schema:
+            type: integer
+            example: 1
+        - name: is_blocked
+          in: query
+          required: false
+          description: Фильтр по статусу блокировки
+          schema:
+            type: boolean
+            example: false
+        - name: search
+          in: query
+          required: false
+          description: Поиск по названию товара
+          schema:
+            type: string
+            maxLength: 255
+            example: 'латте'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  total:
+                    type: integer
+                    description: Общее количество записей (без учёта пагинации)
+                    example: 45
+                  limit:
+                    type: integer
+                    example: 20
+                  offset:
+                    type: integer
+                    example: 0
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/products/{id}/:
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить детали товара
+      description: |
+        Возвращает полную информацию о товаре по его ID, включая список доступных модификаторов.
+        Доступно только администраторам.
+
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID товара
+          schema:
+            type: integer
+            example: 5
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetale'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Товар не найден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Товар с ID 5 не найден'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - Административная Панель
+      summary: Частично обновить товар
+      description: |
+        Администратор может обновить одно или несколько полей товара.
+        Поля, не переданные в запросе, остаются без изменений.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID товара
+          schema:
+            type: integer
+            example: 5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Товар успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Товар не найден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Товар с ID 5 не найден'
+        '409':
+          description: Конфликт (дубликат названия)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Товар с названием "Латте" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/products/{id}/modifiers/:
+    post:
+      tags:
+        - Административная Панель
+      summary: Добавить модификатор к товару
+      description: |
+        Администратор добавляет существующий модификатор к товару.
+        После этого модификатор будет отображаться в карточке товара 
+        в приложении бариста и клиента.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID товара
+          schema:
+            type: integer
+            example: 5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - modifier_id
+              properties:
+                modifier_id:
+                  type: integer
+                  description: ID модификатора
+                  example: 10
+                is_default:
+                  type: boolean
+                  description: Модификатор по умолчанию
+                  example: false
+                sort_order:
+                  type: integer
+                  description: Порядок отображения в списке
+                  example: 1
+      responses:
+        '201':
+          description: Модификатор успешно добавлен к товару
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductModifier'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Товар или модификатор не найдены
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Товар с ID 5 или модификатор с ID 10 не найден'
+        '409':
+          description: Модификатор уже привязан к этому товару
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Модификатор "Карамельный сироп" уже привязан к товару "Латте"'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/products/{id}/modifiers/{modifier_id}/:
+    delete:
+      tags:
+        - Административная Панель
+      summary: Удалить модификатор из товара
+      description: |
+        Администратор удаляет связь между товаром и модификатором.
+        Модификатор перестаёт отображаться в карточке товара,
+        но сам модификатор остаётся в системе.
+
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID товара
+          schema:
+            type: integer
+            example: 5
+        - name: modifier_id
+          in: path
+          required: true
+          description: ID модификатора
+          schema:
+            type: integer
+            example: 10
+      responses:
+        '204':
+          description: Модификатор успешно удалён из товара
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Связь не найдена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Связь товара с модификатором не найдена'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/modifiers/:
+    post:
+      tags:
+        - Административная Панель
+      summary: Создать новый модификатор
+      description: |
+        Администратор создаёт новый модификатор (сироп, молоко, добавка, размер и т.д.).
+        Модификатор становится доступен для привязки к товарам.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModifierCreate'
+      responses:
+        '201':
+          description: Модификатор успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modifier'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Модификатор с таким названием уже существует
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Модификатор с названием "Карамельный сироп" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить список модификаторов
+      description: |
+        Возвращает список всех модификаторов в системе с пагинацией.
+        Администратор может фильтровать по типу, статусу блокировки и искать по названию.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: type
+          in: query
+          required: false
+          description: Фильтр по типу модификатора
+          schema:
+            type: string
+            enum: [volume, addition, milk]
+            example: 'addition'
+        - name: is_blocked
+          in: query
+          required: false
+          description: Фильтр по статусу блокировки
+          schema:
+            type: boolean
+            example: false
+        - name: search
+          in: query
+          required: false
+          description: Поиск по названию модификатора
+          schema:
+            type: string
+            maxLength: 255
+            example: 'сироп'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Modifier'
+                  total:
+                    type: integer
+                    description: Общее количество записей
+                    example: 25
+                  limit:
+                    type: integer
+                    example: 20
+                  offset:
+                    type: integer
+                    example: 0
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /admin/modifiers/{id}/:
+    get:
+      tags:
+        - Административная Панель
+      summary: Получить детали модификатора
+      description: |
+        Возвращает полную информацию о модификаторе по его ID.
+        Доступно только администраторам.
+
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID модификатора
+          schema:
+            type: integer
+            example: 10
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModifierDetail'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Модификатор не найден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Модификатор с ID 10 не найден'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - Административная Панель
+      summary: Частично обновить модификатор
+      description: |
+        Администратор может обновить одно или несколько полей модификатора.
+        Поля, не переданные в запросе, остаются без изменений.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID модификатора
+          schema:
+            type: integer
+            example: 10
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModifierUpdate'
+      responses:
+        '200':
+          description: Модификатор успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modifier'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Модификатор не найден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Модификатор с ID 10 не найден'
+        '409':
+          description: Конфликт (дубликат названия)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Модификатор с названием "Карамельный сироп" уже существует'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT-токен для доступа к API
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT-токен для доступа к API
+          example: 'eyJhbGciOiJIUzI1NiIs...'
+        token_type:
+          type: string
+          example: 'Bearer'
+        expires_in:
+          type: integer
+          description: Время жизни токена в секундах
+          example: 3600
+        refresh_token:
+          type: string
+          description: Токен для обновления access_token
+          example: 'eyJhbGciOiJIUzI1NiIs...'
+        user:
+          $ref: '#/components/schemas/Client'
+    Client:
+      type: object
+      required:
+        - code
+        - phone
+        - createDate
+      properties:
+        code:
+          type: string
+          maxLength: 16
+          example: '1234567876543456'
+        phone:
+          type: string
+          maxLength: 16
+          example: "+70000000000"
+        createDate:
+          type: string
+          format: date
+          example: '2026-01-15'
+    AdminAuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT-токен для доступа к API администрирования
+          example: 'eyJhbGciOiJIUzI1NiIs...'
+        token_type:
+          type: string
+          example: 'Bearer'
+        expires_in:
+          type: integer
+          description: Время жизни токена в секундах
+          example: 3600
+        refresh_token:
+          type: string
+          description: Токен для обновления access_token
+          example: 'eyJhbGciOiJIUzI1NiIs...'
+        user:
+          $ref: '#/components/schemas/AdminUser'
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        email:
+          type: string
+          format: email
+          example: 'admin@coffee.ru'
+        name:
+          type: string
+          example: 'Анна Администратор'
+        role:
+          type: string
+          enum: [admin, superadmin]
+          example: 'admin'
+        is_blocked:
+          type: boolean
+          example: false
+          
+    PointTransaction:
+      allOf:
+        - $ref: '#/components/schemas/OrderData'
+      type: object
+      required:
+        - transaction_type
+        - count_points
+        - total_points
+      properties:
+        transaction_type:
+          type: string
+          enum: [списание, начисление]
+        count_points:
+          type: string
+          maxLength: 16
+          example: "+70000000000"
+        total_points:
+          type: string
+          maxLength: 16
+          example: "+70000000000"
+    Order:
+      allOf:
+        - $ref: '#/components/schemas/OrderData'
+      type: object
+      required:
+        - order_goods
+      properties:
+        order_goods:
+          type: array
+          items: 
+            $ref: '#/components/schemas/ProductOrderData'
+    OrderData:
+      type: object
+      properties:
+        order_code:
+          type: integer
+          example: 12345
+          description: Номер заказа
+        order_date:
+          type: string
+          format: date
+          example: '2026-01-15'
+    ProductOrderData:
+      type: object
+      properties:
+        product_name:
+          type: string
+          example: 'Латте'
+        order_product_price:
+          type: number
+          example: '260,99'
+        product_moditifires:
+          type: array
+          items: 
+            $ref: '#/components/schemas/OrderProductModitifireData'
+    OrderSaveRequest:
+      type: object
+      required:
+        - client_id
+        - coffee_shop_id
+        - items
+        - total
+      properties:
+        client_id:
+          type: integer
+          description: ID клиента (идентифицирован по QR или телефону)
+          example: 123
+        coffee_shop_id:
+          type: integer
+          description: ID кофейни, в которой оформляется заказ
+          example: 1
+        total:
+          type: number
+          format: float
+          minimum: 0
+          description: Итоговая сумма заказа (с учётом модификаторов)
+          example: 680.00
+        items:
+          type: array
+          description: Список товаров в заказе
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+    OrderProductModitifireData:
+      type: object
+      properties:
+        moditifire_name:
+          type: string
+          example: 'Сироп карамельный'
+        product_moditifire_count:
+          type: integer
+          default: 1
+          example: 1
+        product_moditifire_price:
+          type: number
+          example: '10,99'
+          description: Цена на момент продажи
+    OrderItemRequest:
+      type: object
+      required:
+        - product_id
+        - price_at_moment
+      properties:
+        product_id:
+          type: integer
+          description: ID товара
+          example: 5
+        price_at_moment:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена товара на момент продажи
+          example: 300.00
+        modifiers:
+          type: array
+          description: Список модификаторов, добавленных к товару
+          items:
+            $ref: '#/components/schemas/OrderModifierRequest'    
+    OrderModifierRequest:
+      type: object
+      required:
+        - modifier_id
+        - price_at_moment
+      properties:
+        modifier_id:
+          type: integer
+          description: ID модификатора
+          example: 10
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Количество порций модификатора
+          example: 2
+        price_at_moment:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена модификатора на момент продажи
+          example: 50.00
+    OrderSaveResponse:
+      type: object
+      properties:
+        order_id:
+          type: integer
+          description: ID созданного заказа
+          example: 1001
+        order_number:
+          type: integer
+          description: Номер заказа (для печати на чеке)
+          example: 101
+        status:
+          type: string
+          enum: [paid]
+          example: 'paid'
+        bonuses_earned:
+          type: integer
+          description: Количество начисленных баллов
+          example: 68
+        new_balance:
+          type: integer
+          description: Обновлённый баланс клиента
+          example: 408
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-07-30T12:00:00Z'          
+    Profile:
+      type: object
+      properties:
+        client_code:
+          type: string
+          example: '111-111'
+        phone:
+          type: string
+          example: '+79999999999'
+        registration_date:
+          type: string
+          format: date
+          example: '2026-01-15'
+    Product:
+      type: object
+      properties:
+        product_id:
+          type: integer
+          example: 103
+        product_name:
+          type: string
+          example: 'Латте'
+        product_price:
+          type: number
+          example: '206,99'
+    Category:
+      type: object
+      properties:
+        category_name:
+          type: string
+          example: 'Латте'   
+        category_id:
+          type: integer
+          example: 101    
+    Moditifire:
+      type: object
+      properties:
+        moditifire_id:
+          type: integer
+          example: 102
+        moditifire_name:
+          type: string
+          example: 'Латте'
+        moditifire_price:
+          type: number
+          example: '206,99'
+    ProductDetale:
+      allOf:
+        - $ref: '#/components/schemas/Product'
+      properties:
+        moditifires:
+          type: array
+          items:
+            $ref: '#/components/schemas/Moditifire'
+    CoffeeShopCreate:
+      type: object
+      required:
+        - name
+        - address
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название кофейни
+          example: 'Кофейня на Тверской'
+        address:
+          type: string
+          maxLength: 500
+          description: Адрес кофейни
+          example: 'г. Москва, ул. Тверская, д. 10'
+    CoffeeShop:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 'Кофейня на Тверской'
+        address:
+          type: string
+          example: 'г. Москва, ул. Тверская, д. 10'
+        is_blocked:
+          type: boolean
+          example: false  
+    CoffeeShopUpdate:
+      type: object
+      description: Поля для обновления кофейни (все опциональны)
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название кофейни
+          example: 'Обновлённая кофейня'
+        address:
+          type: string
+          maxLength: 500
+          description: Адрес кофейни
+          example: 'г. Москва, ул. Новый Арбат, д. 15'
+        phone:
+          type: string
+          nullable: true
+          description: Телефон кофейни
+          example: '+74959876543'
+        is_blocked:
+          type: boolean
+          description: Статус блокировки
+          example: true
+    ProductCreate:
+      type: object
+      required:
+        - name
+        - price
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название товара
+          example: 'Латте'
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена товара
+          example: 300.00
+        category_id:
+          type: integer
+          nullable: true
+          description: ID категории (опционально)
+          example: 1
+    ProductUpdate:
+      type: object
+      description: Поля для обновления товара (все опциональны)
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название товара
+          example: 'Латте обновлённое'
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена товара
+          example: 350.00
+        category_id:
+          type: integer
+          nullable: true
+          description: ID категории
+          example: 2
+        is_blocked:
+          type: boolean
+          description: Статус блокировки
+          example: false
+    ProductModifier:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        product_id:
+          type: integer
+          example: 5
+        modifier_id:
+          type: integer
+          example: 10
+    ModifierCreate:
+      type: object
+      required:
+        - name
+        - price
+        - type
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название модификатора
+          example: 'Карамельный сироп'
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена модификатора
+          example: 50.00
+    Modifier:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        name:
+          type: string
+          example: 'Карамельный сироп'
+        price:
+          type: number
+          example: 50.00
+        is_blocked:
+          type: boolean
+          example: false
+    ModifierDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        name:
+          type: string
+          example: 'Карамельный сироп'
+        price:
+          type: number
+          example: 50.00
+        is_blocked:
+          type: boolean
+          example: false
+    ModifierUpdate:
+      type: object
+      description: Поля для обновления модификатора (все опциональны)
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название модификатора
+          example: 'Карамельный сироп обновлённый'
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Цена модификатора
+          example: 60.00
+        type:
+          type: string
+          enum: [volume, addition, milk]
+          description: Тип модификатора
+          example: 'addition'
+        max_quantity:
+          type: integer
+          minimum: 1
+          description: Максимальное количество порций
+          example: 5
+        is_blocked:
+          type: boolean
+          description: Статус блокировки
+          example: false
+    CategoryCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Название категории
+          example: 'Кофе'
+    CategoryUpdate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Новое название категории
+          example: 'Горячие напитки'
+        is_block:
+          type: boolean
+          example: false
+
+
+
+
+  responses:
+    BadRequestError:
+      description: Неверный запрос
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Неверный формат параметра'
+    UnauthorizedError:
+      description: Не авторизован
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Требуется авторизация'
+    ForbiddenError:
+      description: 'Доступ запрещён'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Доступ запрещён'
+    NotFoundError:
+      description: 'Ресурс не найден'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Ресурс не найден'          
+    InternalServerError:
+      description: 'Внутренняя ошибка сервера'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Внутренняя ошибка сервера'
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Количество записей на странице (макс. 100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+        example: 20
+    OffsetParam:
+      name: offset
+      in: query
+      required: false
+      description: Смещение для пагинации
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+        example: 0
+
